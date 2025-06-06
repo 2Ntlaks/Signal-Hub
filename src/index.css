@@ -1,0 +1,8 @@
+/* Remove the @tailwind directives since we're using CDN */
+
+/* Custom styles */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
