@@ -1,108 +1,173 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Use environment variables in production, fallback to your values for now
-const supabaseUrl =
-  import.meta.env.VITE_SUPABASE_URL ||
-  "https://nrjefyzyiodmkamsvhgb.supabase.co";
-const supabaseAnonKey =
-  import.meta.env.VITE_SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5yamVmeXp5aW9kbWthbXN2aGdiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg3MjYwNzQsImV4cCI6MjA2NDMwMjA3NH0.nz_ak7yRGl2N380Qqy9_fyGAOmgeYsqmWuRQwxNtIi8";
+// NEVER hardcode your keys in the source code!
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Validate that environment variables are set
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    "Missing Supabase environment variables. Please check your .env file."
+  );
+}
 
-// Helper functions for common operations
+// Log only the URL (never log the key!)
+console.log("🔗 Connecting to Supabase project:", supabaseUrl);
+
+// Create the client
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storageKey: "supabase.auth.token",
+    storage: window.localStorage,
+  },
+});
+
+// Helper functions remain the same as before...
 export const supabaseHelpers = {
   // Authentication
   async signUp(email, password, metadata = {}) {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: metadata,
-      },
-    });
-    return { data, error };
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: metadata,
+        },
+      });
+      return { data, error };
+    } catch (err) {
+      console.error("SignUp error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async signIn(email, password) {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { data, error };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      return { data, error };
+    } catch (err) {
+      console.error("SignIn error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async signOut() {
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    try {
+      const { error } = await supabase.auth.signOut();
+      return { error };
+    } catch (err) {
+      console.error("SignOut error:", err);
+      return { error: err };
+    }
   },
 
   async getCurrentUser() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    return user;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      return user;
+    } catch (err) {
+      console.error("Get user error:", err);
+      return null;
+    }
   },
 
   // Profiles
   async getProfile(userId) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+      return { data, error };
+    } catch (err) {
+      console.error("Get profile error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async createProfile(userId, profileData) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .insert([
-        {
-          id: userId,
-          ...profileData,
-        },
-      ])
-      .select()
-      .single();
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .insert([
+          {
+            id: userId,
+            ...profileData,
+          },
+        ])
+        .select()
+        .single();
+      return { data, error };
+    } catch (err) {
+      console.error("Create profile error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async updateProfile(userId, updates) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .update(updates)
-      .eq("id", userId)
-      .select()
-      .single();
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", userId)
+        .select()
+        .single();
+      return { data, error };
+    } catch (err) {
+      console.error("Update profile error:", err);
+      return { data: null, error: err };
+    }
   },
 
   // Chapters
   async getChapters() {
-    const { data, error } = await supabase
-      .from("chapters")
-      .select("*")
-      .order("chapter_order");
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("chapters")
+        .select("*")
+        .order("chapter_order");
+      return { data, error };
+    } catch (err) {
+      console.error("Get chapters error:", err);
+      return { data: [], error: err };
+    }
   },
 
   async getChapter(id) {
-    const { data, error } = await supabase
-      .from("chapters")
-      .select("*")
-      .eq("id", id)
-      .single();
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("chapters")
+        .select("*")
+        .eq("id", id)
+        .single();
+      return { data, error };
+    } catch (err) {
+      console.error("Get chapter error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async createChapter(chapter) {
-    const { data, error } = await supabase
-      .from("chapters")
-      .insert([chapter])
-      .select()
-      .single();
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("chapters")
+        .insert([chapter])
+        .select()
+        .single();
+      return { data, error };
+    } catch (err) {
+      console.error("Create chapter error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async updateChapter(id, updates) {
@@ -118,7 +183,6 @@ export const supabaseHelpers = {
         return { data: null, error };
       }
 
-      // Return the first item if array, or null if empty
       const result = data && data.length > 0 ? data[0] : null;
       return { data: result, error: null };
     } catch (err) {
@@ -128,144 +192,205 @@ export const supabaseHelpers = {
   },
 
   async deleteChapter(id) {
-    const { error } = await supabase.from("chapters").delete().eq("id", id);
-    return { error };
+    try {
+      const { error } = await supabase.from("chapters").delete().eq("id", id);
+      return { error };
+    } catch (err) {
+      console.error("Delete chapter error:", err);
+      return { error: err };
+    }
   },
 
   // User Progress
   async getUserProgress(userId) {
-    const { data, error } = await supabase
-      .from("user_progress")
-      .select("*, chapters(*)")
-      .eq("user_id", userId);
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("user_progress")
+        .select("*, chapters(*)")
+        .eq("user_id", userId);
+      return { data: data || [], error };
+    } catch (err) {
+      console.error("Get user progress error:", err);
+      return { data: [], error: err };
+    }
   },
 
   async updateProgress(userId, chapterId, progressData) {
-    const { data, error } = await supabase
-      .from("user_progress")
-      .upsert([
-        {
-          user_id: userId,
-          chapter_id: chapterId,
-          ...progressData,
-        },
-      ])
-      .select()
-      .single();
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("user_progress")
+        .upsert([
+          {
+            user_id: userId,
+            chapter_id: chapterId,
+            ...progressData,
+          },
+        ])
+        .select()
+        .single();
+      return { data, error };
+    } catch (err) {
+      console.error("Update progress error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async markChapterComplete(userId, chapterId) {
-    const { data, error } = await supabase
-      .from("user_progress")
-      .upsert([
-        {
-          user_id: userId,
-          chapter_id: chapterId,
-          progress_percentage: 100,
-          completed_at: new Date().toISOString(),
-        },
-      ])
-      .select()
-      .single();
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("user_progress")
+        .upsert([
+          {
+            user_id: userId,
+            chapter_id: chapterId,
+            progress_percentage: 100,
+            completed_at: new Date().toISOString(),
+          },
+        ])
+        .select()
+        .single();
+      return { data, error };
+    } catch (err) {
+      console.error("Mark chapter complete error:", err);
+      return { data: null, error: err };
+    }
   },
 
   // Bookmarks
   async getUserBookmarks(userId) {
-    const { data, error } = await supabase
-      .from("bookmarks")
-      .select("*, chapters(*)")
-      .eq("user_id", userId);
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("bookmarks")
+        .select("*, chapters(*)")
+        .eq("user_id", userId);
+      return { data: data || [], error };
+    } catch (err) {
+      console.error("Get bookmarks error:", err);
+      return { data: [], error: err };
+    }
   },
 
   async toggleBookmark(userId, chapterId) {
-    // Check if bookmark exists
-    const { data: existing } = await supabase
-      .from("bookmarks")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("chapter_id", chapterId)
-      .single();
-
-    if (existing) {
-      // Remove bookmark
-      const { error } = await supabase
+    try {
+      const { data: existing } = await supabase
         .from("bookmarks")
-        .delete()
+        .select("id")
         .eq("user_id", userId)
-        .eq("chapter_id", chapterId);
-      return { removed: true, error };
-    } else {
-      // Add bookmark
-      const { data, error } = await supabase
-        .from("bookmarks")
-        .insert([{ user_id: userId, chapter_id: chapterId }])
-        .select()
+        .eq("chapter_id", chapterId)
         .single();
-      return { added: true, data, error };
+
+      if (existing) {
+        const { error } = await supabase
+          .from("bookmarks")
+          .delete()
+          .eq("user_id", userId)
+          .eq("chapter_id", chapterId);
+        return { removed: true, error };
+      } else {
+        const { data, error } = await supabase
+          .from("bookmarks")
+          .insert([{ user_id: userId, chapter_id: chapterId }])
+          .select()
+          .single();
+        return { added: true, data, error };
+      }
+    } catch (err) {
+      console.error("Toggle bookmark error:", err);
+      return { error: err };
     }
   },
 
   // Analytics helpers for admin
   async getUserStats() {
-    const { data: users, error: usersError } = await supabase
-      .from("profiles")
-      .select("*");
+    try {
+      const { data: users, error: usersError } = await supabase
+        .from("profiles")
+        .select("*");
 
-    const { data: progress, error: progressError } = await supabase
-      .from("user_progress")
-      .select("*");
+      const { data: progress, error: progressError } = await supabase
+        .from("user_progress")
+        .select("*");
 
-    return {
-      users: users || [],
-      progress: progress || [],
-      errors: { usersError, progressError },
-    };
+      return {
+        users: users || [],
+        progress: progress || [],
+        errors: { usersError, progressError },
+      };
+    } catch (err) {
+      console.error("Get user stats error:", err);
+      return {
+        users: [],
+        progress: [],
+        errors: { general: err },
+      };
+    }
   },
-  // Add these file management functions to your supabaseHelpers object
 
   // File operations
   async uploadFile(bucket, path, file) {
-    const { data, error } = await supabase.storage
-      .from(bucket)
-      .upload(path, file, {
-        cacheControl: "3600",
-        upsert: true,
-      });
-    return { data, error };
+    try {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(path, file, {
+          cacheControl: "3600",
+          upsert: true,
+        });
+      return { data, error };
+    } catch (err) {
+      console.error("Upload file error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async deleteFile(bucket, path) {
-    const { data, error } = await supabase.storage.from(bucket).remove([path]);
-    return { data, error };
+    try {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .remove([path]);
+      return { data, error };
+    } catch (err) {
+      console.error("Delete file error:", err);
+      return { data: null, error: err };
+    }
   },
 
   async getFileUrl(bucket, path) {
-    const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-    return data.publicUrl;
+    try {
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+      return data.publicUrl;
+    } catch (err) {
+      console.error("Get file URL error:", err);
+      return null;
+    }
   },
 
   async listFiles(bucket, folder = "") {
-    const { data, error } = await supabase.storage.from(bucket).list(folder);
-    return { data, error };
+    try {
+      const { data, error } = await supabase.storage.from(bucket).list(folder);
+      return { data, error };
+    } catch (err) {
+      console.error("List files error:", err);
+      return { data: [], error: err };
+    }
   },
 
-  // Update chapter with file paths
   async updateChapterFiles(chapterId, filePaths) {
-    const { data, error } = await supabase
-      .from("chapters")
-      .update({
-        notes_file_path: filePaths.notes || null,
-        solutions_file_path: filePaths.solutions || null,
-        formulas_file_path: filePaths.formulas || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", chapterId)
-      .select()
-      .single();
-    return { data, error };
+    try {
+      const { data, error } = await supabase
+        .from("chapters")
+        .update({
+          notes_file_path: filePaths.notes || null,
+          solutions_file_path: filePaths.solutions || null,
+          formulas_file_path: filePaths.formulas || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", chapterId)
+        .select()
+        .single();
+      return { data, error };
+    } catch (err) {
+      console.error("Update chapter files error:", err);
+      return { data: null, error: err };
+    }
   },
 };
