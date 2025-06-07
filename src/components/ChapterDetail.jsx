@@ -8,17 +8,12 @@ import {
   Star,
   CheckCircle,
   Trophy,
-  Loader,
-  AlertCircle,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import { supabase } from "../lib/supabase";
+import { supabaseHelpers } from "../lib/supabase";
 
 const ChapterDetail = ({ chapter, onBack }) => {
   const [isCompleting, setIsCompleting] = useState(false);
-  const [downloadingFile, setDownloadingFile] = useState(null);
-  const [viewError, setViewError] = useState("");
-
   const {
     markChapterComplete,
     isChapterCompleted,
@@ -41,6 +36,7 @@ const ChapterDetail = ({ chapter, onBack }) => {
         alert("Failed to mark chapter as complete. Please try again.");
       } else {
         console.log("🎉 Chapter completed!");
+        // Show success message or animation
       }
     } catch (error) {
       console.error("Chapter completion error:", error);
@@ -63,65 +59,32 @@ const ChapterDetail = ({ chapter, onBack }) => {
     }
   };
 
-  // View PDF in browser
-  const handleViewPDF = async (fileType) => {
-    const filePath = chapter.materials[fileType];
-    if (!filePath) return;
+  // This function fetches the URL just-in-time when a button is clicked
+  const handleViewOrDownload = async (materialType) => {
+    // --- DEBUGGING LOG ---
+    console.log(`Button clicked for: ${materialType}. Fetching a new URL...`);
 
-    setDownloadingFile(fileType);
-    setViewError("");
+    const filePath = chapter.materials?.[materialType];
+
+    if (!filePath) {
+      console.error("No file path found for material:", materialType);
+      alert("Sorry, the file for this material is not available.");
+      return;
+    }
 
     try {
-      // Get the public URL from Supabase Storage
-      const { data } = supabase.storage
-        .from("chapter-materials")
-        .getPublicUrl(filePath);
-
-      if (data?.publicUrl) {
-        // Open PDF in new tab
-        window.open(data.publicUrl, "_blank");
+      const url = await supabaseHelpers.getFileUrl(
+        "chapter-materials",
+        filePath
+      );
+      if (url) {
+        window.open(url, "_blank");
       } else {
-        throw new Error("Could not get file URL");
+        throw new Error("Could not retrieve file URL.");
       }
     } catch (error) {
-      console.error("View PDF error:", error);
-      setViewError("Failed to load PDF. Please try again.");
-    } finally {
-      setDownloadingFile(null);
-    }
-  };
-
-  // Download PDF
-  const handleDownloadPDF = async (fileType) => {
-    const filePath = chapter.materials[fileType];
-    if (!filePath) return;
-
-    setDownloadingFile(fileType);
-    setViewError("");
-
-    try {
-      // Get the file data
-      const { data, error } = await supabase.storage
-        .from("chapter-materials")
-        .download(filePath);
-
-      if (error) throw error;
-
-      // Create a blob URL and trigger download
-      const blob = new Blob([data], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${chapter.title} - ${fileType}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Download error:", error);
-      setViewError("Failed to download PDF. Please try again.");
-    } finally {
-      setDownloadingFile(null);
+      console.error("Error generating signed URL:", error);
+      alert("Sorry, there was an error accessing the file. Please try again.");
     }
   };
 
@@ -135,7 +98,6 @@ const ChapterDetail = ({ chapter, onBack }) => {
       color: "blue",
       gradient: "from-blue-500 to-blue-600",
       bgGradient: "from-blue-50 to-blue-100",
-      emoji: "📝",
     },
     {
       type: "solutions",
@@ -146,7 +108,6 @@ const ChapterDetail = ({ chapter, onBack }) => {
       color: "green",
       gradient: "from-green-500 to-emerald-600",
       bgGradient: "from-green-50 to-emerald-100",
-      emoji: "✅",
     },
     {
       type: "formulas",
@@ -157,7 +118,6 @@ const ChapterDetail = ({ chapter, onBack }) => {
       color: "purple",
       gradient: "from-purple-500 to-purple-600",
       bgGradient: "from-purple-50 to-purple-100",
-      emoji: "🔢",
     },
   ];
 
@@ -249,14 +209,7 @@ const ChapterDetail = ({ chapter, onBack }) => {
             </div>
             <div className="flex items-center space-x-2">
               <FileText className="h-4 w-4" />
-              <span>
-                {
-                  Object.keys(chapter.materials).filter(
-                    (key) => chapter.materials[key]
-                  ).length
-                }{" "}
-                Resources
-              </span>
+              <span>{Object.keys(chapter.materials).length} Resources</span>
             </div>
             {isCompleted && (
               <div className="flex items-center space-x-2 text-green-300">
@@ -267,16 +220,6 @@ const ChapterDetail = ({ chapter, onBack }) => {
           </div>
         </div>
       </div>
-
-      {/* Error Message */}
-      {viewError && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <div className="flex items-center space-x-3">
-            <AlertCircle className="h-5 w-5 text-red-600" />
-            <p className="text-red-800">{viewError}</p>
-          </div>
-        </div>
-      )}
 
       {/* Materials Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -289,7 +232,7 @@ const ChapterDetail = ({ chapter, onBack }) => {
           return (
             <div
               key={material.type}
-              className="group relative bg-white rounded-2xl border border-gray-100 shadow-lg hover:shadow-2xl transition-all duration-500 overflow-hidden hover:-translate-y-2"
+              className="group relative bg-white rounded-2xl border border-gray-100 shadow-lg hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden hover:-translate-y-2"
             >
               {/* Background Gradient */}
               <div
@@ -306,7 +249,7 @@ const ChapterDetail = ({ chapter, onBack }) => {
                 <div
                   className={`w-16 h-16 bg-gradient-to-br ${material.gradient} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-lg`}
                 >
-                  <span className="text-2xl">{material.emoji}</span>
+                  <Icon className="h-8 w-8 text-white" />
                 </div>
 
                 {/* Content */}
@@ -321,38 +264,26 @@ const ChapterDetail = ({ chapter, onBack }) => {
                 {/* Action Buttons */}
                 <div className="space-y-3">
                   <button
-                    onClick={() => handleViewPDF(material.type)}
-                    disabled={downloadingFile === material.type}
-                    className={`w-full bg-gradient-to-r ${material.gradient} text-white py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium flex items-center justify-center space-x-2 disabled:opacity-50`}
+                    onClick={() => handleViewOrDownload(material.type)}
+                    className={`w-full bg-gradient-to-r ${material.gradient} text-white py-3 rounded-xl hover:shadow-lg transition-all duration-300 font-medium flex items-center justify-center space-x-2`}
                   >
-                    {downloadingFile === material.type ? (
-                      <>
-                        <Loader className="h-4 w-4 animate-spin" />
-                        <span>Loading...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="h-4 w-4" />
-                        <span>View Content</span>
-                      </>
-                    )}
+                    <Eye className="h-4 w-4" />
+                    <span>View Content</span>
                   </button>
 
                   <button
-                    onClick={() => handleDownloadPDF(material.type)}
-                    disabled={downloadingFile === material.type}
-                    className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl hover:bg-gray-200 transition-colors duration-300 font-medium flex items-center justify-center space-x-2 disabled:opacity-50"
+                    onClick={() => handleViewOrDownload(material.type)}
+                    className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl hover:bg-gray-200 transition-colors duration-300 font-medium flex items-center justify-center space-x-2"
                   >
                     <Download className="h-4 w-4" />
                     <span>Download PDF</span>
                   </button>
                 </div>
 
-                {/* Status Badge */}
-                <div className="mt-4 flex items-center justify-center">
-                  <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium">
-                    Available
-                  </span>
+                {/* File Info */}
+                <div className="mt-4 flex items-center justify-between text-xs text-gray-500">
+                  <span>PDF • 2.4 MB</span>
+                  <span>Updated 2 days ago</span>
                 </div>
               </div>
             </div>

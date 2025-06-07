@@ -156,6 +156,19 @@ export const supabaseHelpers = {
     }
   },
 
+  // --- NEW SEARCH FUNCTION ADDED HERE ---
+  async searchChapters(searchTerm) {
+    try {
+      const { data, error } = await supabase.rpc("search_chapters", {
+        search_term: searchTerm,
+      });
+      return { data, error };
+    } catch (err) {
+      console.error("Search chapters error:", err);
+      return { data: null, error: err };
+    }
+  },
+
   async createChapter(chapter) {
     try {
       const { data, error } = await supabase
@@ -356,10 +369,36 @@ export const supabaseHelpers = {
 
   async getFileUrl(bucket, path) {
     try {
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path);
-      return data.publicUrl;
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(path, 60);
+
+      if (error) {
+        throw error;
+      }
+
+      return data.signedUrl;
     } catch (err) {
       console.error("Get file URL error:", err);
+      return null;
+    }
+  },
+
+  async getSignedUrlForDownload(bucket, path) {
+    try {
+      const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(path, 60, {
+          download: true,
+        });
+
+      if (error) {
+        throw error;
+      }
+
+      return data.signedUrl;
+    } catch (err) {
+      console.error("Get signed URL for download error:", err);
       return null;
     }
   },

@@ -10,16 +10,24 @@ export const useChapters = () => {
   // Load chapters from Supabase
   const loadChapters = async () => {
     try {
+      console.log("[useChapters] 1. Setting loading to true."); // DEBUG LOG
       setLoading(true);
+
+      console.log(
+        "[useChapters] 2. Starting to fetch chapters from Supabase..."
+      ); // DEBUG LOG
       const { data, error } = await supabaseHelpers.getChapters();
+      console.log("[useChapters] 3. Finished fetching from Supabase."); // DEBUG LOG
 
       if (error) {
         setError(error.message);
         console.error("Error loading chapters:", error);
+        // ✏️ MODIFIED: Ensure finally block is reached even on error
+        setLoading(false);
         return;
       }
 
-      // Transform data to match your existing format
+      console.log("[useChapters] 4. Transforming chapter data..."); // DEBUG LOG
       const transformedChapters = data.map((chapter) => ({
         id: chapter.id,
         title: chapter.title,
@@ -37,10 +45,12 @@ export const useChapters = () => {
 
       setChapters(transformedChapters);
       setError(null);
+      console.log("[useChapters] 5. Data transformation complete."); // DEBUG LOG
     } catch (err) {
       setError(err.message);
       console.error("Error in loadChapters:", err);
     } finally {
+      console.log("[useChapters] 6. FINALLY: Setting loading to false."); // DEBUG LOG
       setLoading(false);
     }
   };
@@ -55,7 +65,6 @@ export const useChapters = () => {
     try {
       setLoading(true);
 
-      // Transform data for Supabase
       const supabaseData = {
         title: chapterData.title,
         description: chapterData.description,
@@ -73,9 +82,7 @@ export const useChapters = () => {
         return { success: false, error: error.message };
       }
 
-      // Reload chapters to get updated list
       await loadChapters();
-
       return { success: true, data };
     } catch (err) {
       setError(err.message);
@@ -87,9 +94,7 @@ export const useChapters = () => {
     try {
       setLoading(true);
 
-      // Transform updates for Supabase
       const supabaseUpdates = {};
-
       if (updates.title) supabaseUpdates.title = updates.title;
       if (updates.description)
         supabaseUpdates.description = updates.description;
@@ -115,9 +120,7 @@ export const useChapters = () => {
         return { success: false, error: error.message };
       }
 
-      // Reload chapters to get updated list
       await loadChapters();
-
       return { success: true, data };
     } catch (err) {
       setError(err.message);
@@ -128,17 +131,12 @@ export const useChapters = () => {
   const deleteChapter = async (id) => {
     try {
       setLoading(true);
-
       const { error } = await supabaseHelpers.deleteChapter(id);
-
       if (error) {
         setError(error.message);
         return { success: false, error: error.message };
       }
-
-      // Reload chapters to get updated list
       await loadChapters();
-
       return { success: true };
     } catch (err) {
       setError(err.message);

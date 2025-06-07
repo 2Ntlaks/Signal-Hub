@@ -178,33 +178,12 @@ const AppContent = () => {
           return <AdminOverview chapters={chapters} />;
         case "chapters":
           return (
-            <div className="space-y-8">
-              <div className="text-center">
-                <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent mb-4">
-                  📚 Course Chapters
-                </h2>
-                <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-                  Master Signal Processing with our comprehensive CPUT
-                  curriculum. Each chapter builds upon the previous one.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {chapters.map((chapter) => (
-                  <ChapterCard
-                    key={chapter.id}
-                    chapter={chapter}
-                    user={profile}
-                    onChapterClick={handleChapterClick}
-                    completedChapters={
-                      getCompletedChapterIds ? getCompletedChapterIds() : []
-                    }
-                    bookmarkedChapters={
-                      getBookmarkedChapterIds ? getBookmarkedChapterIds() : []
-                    }
-                  />
-                ))}
-              </div>
-            </div>
+            <ChapterManagement
+              chapters={chapters}
+              addChapter={addChapter}
+              updateChapter={updateChapter}
+              deleteChapter={deleteChapter}
+            />
           );
         case "users":
           return <UserManagement />;
@@ -265,7 +244,7 @@ const AppContent = () => {
           />
         );
       case "search":
-        return <SearchComponent />;
+        return <SearchComponent onChapterClick={handleChapterClick} />;
       case "concept-explainer":
         return <ConceptExplainer />;
       default:

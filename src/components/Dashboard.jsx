@@ -1,31 +1,35 @@
 import React from "react";
 import { TrendingUp, Star, Award, Clock } from "lucide-react";
+import { useAuth } from "../contexts/AuthContext"; // ➕ ADDED: Import useAuth
 
-const Dashboard = ({ user, chapters }) => {
-  // Add null checks to prevent errors during loading
-  if (!user || !chapters) {
+// ✏️ MODIFIED: Accept a 'loading' prop and get data from useAuth
+const Dashboard = ({ chapters, loading }) => {
+  const { profile, userProgress, userBookmarks } = useAuth();
+
+  // Show a skeleton loader while chapters are loading or if the user profile isn't available yet
+  if (loading || !profile) {
     return (
-      <div className="space-y-8">
-        <div className="text-center py-12">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
-            <span className="text-white font-bold text-xl">🎓</span>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Loading your dashboard...
-          </h2>
-          <p className="text-gray-600">
-            Preparing your personalized experience
-          </p>
+      <div className="space-y-8 animate-pulse">
+        <div className="relative overflow-hidden bg-gray-200 rounded-2xl p-8 h-48"></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-gray-200 rounded-2xl p-6 h-36"></div>
+          <div className="bg-gray-200 rounded-2xl p-6 h-36"></div>
+          <div className="bg-gray-200 rounded-2xl p-6 h-36"></div>
         </div>
+        <div className="bg-gray-200 rounded-2xl p-8 h-64"></div>
       </div>
     );
   }
 
   const totalChapters = chapters.length;
-  const completedChapters = user.completedChapters?.length || 0;
+  // ✏️ MODIFIED: Calculate stats from the correct context variables
+  const completedChapters = userProgress.filter(
+    (p) => p.progress_percentage === 100
+  ).length;
+  const bookmarkedCount = userBookmarks.length;
+
   const progressPercentage =
     totalChapters > 0 ? (completedChapters / totalChapters) * 100 : 0;
-  const userBookmarks = user.bookmarks?.length || 0;
 
   return (
     <div className="space-y-8">
@@ -39,7 +43,7 @@ const Dashboard = ({ user, chapters }) => {
             </div>
             <div>
               <h2 className="text-3xl font-bold">
-                Welcome back, {user.name?.split(" ")[0] || "Student"}! 👋
+                Welcome back, {profile.name?.split(" ")[0] || "Student"}! 👋
               </h2>
               <p className="text-blue-100 text-lg">
                 Ready to master Signal Processing today?
@@ -100,7 +104,7 @@ const Dashboard = ({ user, chapters }) => {
               <Star className="h-6 w-6 text-white" />
             </div>
             <span className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-              {userBookmarks}
+              {bookmarkedCount}
             </span>
           </div>
           <h3 className="font-semibold text-gray-900 mb-1">Bookmarked</h3>
@@ -110,7 +114,7 @@ const Dashboard = ({ user, chapters }) => {
               <div
                 key={i}
                 className={`h-2 w-full rounded-full ${
-                  i < userBookmarks
+                  i < bookmarkedCount
                     ? "bg-gradient-to-r from-purple-500 to-pink-500"
                     : "bg-gray-100"
                 }`}
@@ -125,16 +129,16 @@ const Dashboard = ({ user, chapters }) => {
               <Clock className="h-5 w-5 text-white" />
             </div>
             <span className="text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent capitalize">
-              {user.tier || "free"}
+              {profile.tier || "free"}
             </span>
           </div>
           <h3 className="font-semibold text-gray-900 mb-1">Current Plan</h3>
           <p className="text-gray-500 text-sm">
-            {(user.tier || "free") === "free"
+            {(profile.tier || "free") === "free"
               ? "Limited access to content"
               : "Full access to all content"}
           </p>
-          {(user.tier || "free") === "free" && (
+          {(profile.tier || "free") === "free" && (
             <button className="mt-3 w-full bg-gradient-to-r from-green-500 to-emerald-500 text-white py-2 rounded-lg hover:from-green-600 hover:to-emerald-600 transition-all duration-300 text-sm font-medium">
               Upgrade Now
             </button>
@@ -162,7 +166,6 @@ const Dashboard = ({ user, chapters }) => {
               key={chapter.id}
               className="group relative bg-gradient-to-br from-gray-50 to-white border border-gray-100 rounded-xl p-6 hover:shadow-lg transition-all duration-300 cursor-pointer hover:-translate-y-1"
             >
-              {/* Chapter Number Badge */}
               <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
                 {chapter.order}
               </div>
@@ -171,7 +174,10 @@ const Dashboard = ({ user, chapters }) => {
                 <span className="bg-gradient-to-r from-blue-100 to-purple-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium">
                   Chapter {chapter.order}
                 </span>
-                {(user.completedChapters || []).includes(chapter.id) && (
+                {userProgress.some(
+                  (p) =>
+                    p.chapter_id === chapter.id && p.progress_percentage === 100
+                ) && (
                   <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
                     <span className="text-white text-xs font-bold">✓</span>
                   </div>
@@ -185,7 +191,6 @@ const Dashboard = ({ user, chapters }) => {
                 {chapter.description}
               </p>
 
-              {/* Progress indicator */}
               <div className="flex items-center space-x-2 text-xs text-gray-500">
                 <div className="flex space-x-1">
                   <div className="w-2 h-2 bg-blue-500 rounded-full"></div>

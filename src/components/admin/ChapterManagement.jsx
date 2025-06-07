@@ -3,19 +3,12 @@ import {
   Plus,
   Edit,
   Trash2,
-  Upload,
   Save,
   X,
-  FileText,
-  Eye,
   Lock,
   Unlock,
-  Star,
   ArrowUp,
   ArrowDown,
-  Download,
-  AlertCircle,
-  CheckCircle,
 } from "lucide-react";
 import { supabaseHelpers } from "../../lib/supabase";
 import FileUpload from "./FileUpload";
@@ -32,10 +25,75 @@ const ChapterManagement = ({
   const [editForm, setEditForm] = useState({});
   const [loading, setLoading] = useState(false);
 
+  // File upload states
+  const [uploadingFiles, setUploadingFiles] = useState({
+    notes: false,
+    solutions: false,
+    formulas: false,
+  });
+  const [uploadedFiles, setUploadedFiles] = useState({
+    notes: null,
+    solutions: null,
+    formulas: null,
+  });
+
   const handleEdit = (chapter) => {
     setSelectedChapter(chapter);
     setEditForm(chapter);
     setIsEditing(true);
+    // Reset file states
+    setUploadedFiles({
+      notes: null,
+      solutions: null,
+      formulas: null,
+    });
+  };
+
+  const handleFileUpload = async (fileType, file) => {
+    if (!file) return;
+
+    setUploadingFiles((prev) => ({ ...prev, [fileType]: true }));
+
+    try {
+      const chapterId = selectedChapter?.id || "temp-" + Date.now();
+      const result = await supabaseHelpers.uploadChapterFile(
+        chapterId,
+        fileType,
+        file
+      );
+
+      if (result.error) {
+        alert(`Upload failed: ${result.error.message}`);
+        return;
+      }
+
+      // Store uploaded file info
+      setUploadedFiles((prev) => ({
+        ...prev,
+        [fileType]: {
+          path: result.data.path,
+          url: result.data.url,
+          fileName: result.data.fileName,
+          fileSize: result.data.fileSize,
+        },
+      }));
+
+      // Update form with file path
+      setEditForm((prev) => ({
+        ...prev,
+        materials: {
+          ...prev.materials,
+          [fileType]: result.data.path,
+        },
+      }));
+
+      console.log(`✅ ${fileType} uploaded successfully`);
+    } catch (error) {
+      console.error(`File upload error:`, error);
+      alert(`Upload failed: ${error.message}`);
+    } finally {
+      setUploadingFiles((prev) => ({ ...prev, [fileType]: false }));
+    }
   };
 
   const handleSave = async () => {
@@ -49,6 +107,7 @@ const ChapterManagement = ({
           alert("Chapter created successfully!");
           setShowAddForm(false);
           setEditForm({});
+          setUploadedFiles({ notes: null, solutions: null, formulas: null });
         } else {
           alert(`Error creating chapter: ${result.error}`);
         }
@@ -60,6 +119,7 @@ const ChapterManagement = ({
           setIsEditing(false);
           setSelectedChapter(null);
           setEditForm({});
+          setUploadedFiles({ notes: null, solutions: null, formulas: null });
         } else {
           alert(`Error updating chapter: ${result.error}`);
         }
@@ -98,43 +158,24 @@ const ChapterManagement = ({
       isUnlocked: true,
       materials: { notes: "", solutions: "", formulas: "" },
     });
+    setUploadedFiles({ notes: null, solutions: null, formulas: null });
     setShowAddForm(true);
   };
 
-  const moveChapter = async (chapter, direction) => {
-    const currentOrder = chapter.order;
-    const newOrder = direction === "up" ? currentOrder - 1 : currentOrder + 1;
-
-    // Find the chapter to swap with
-    const swapChapter = chapters.find((ch) => ch.order === newOrder);
-    if (!swapChapter) return;
-
-    // Update both chapters
-    await updateChapter(chapter.id, { order: newOrder });
-    await updateChapter(swapChapter.id, { order: currentOrder });
-  };
-
-  // Calculate stats
-  const stats = {
-    total: chapters.length,
-    published: chapters.filter((ch) => ch.isUnlocked).length,
-    draft: chapters.filter((ch) => !ch.isUnlocked).length,
-    withMaterials: chapters.filter(
-      (ch) =>
-        ch.materials.notes || ch.materials.solutions || ch.materials.formulas
-    ).length,
+  const handleInputChange = (field, value) => {
+    setEditForm((prev) => ({ ...prev, [field]: value }));
   };
 
   return (
     <div className="space-y-8">
-      {/* Header */}
+      {/* Header and Add Button */}
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-3xl font-bold text-gray-900 mb-2">
             Chapter Management
           </h2>
           <p className="text-gray-600">
-            Create and manage course content for students
+            Add, edit, and manage all course chapters and materials.
           </p>
         </div>
         <button
@@ -144,67 +185,6 @@ const ChapterManagement = ({
           <Plus className="h-5 w-5" />
           <span>Add New Chapter</span>
         </button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                Total Chapters
-              </p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-            <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
-              <BookOpen className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Published</p>
-              <p className="text-2xl font-bold text-green-600">
-                {stats.published}
-              </p>
-            </div>
-            <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
-              <Unlock className="h-5 w-5 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">Drafts</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {stats.draft}
-              </p>
-            </div>
-            <div className="w-10 h-10 bg-orange-50 rounded-lg flex items-center justify-center">
-              <Lock className="h-5 w-5 text-orange-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-100 shadow-lg p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600">
-                With Materials
-              </p>
-              <p className="text-2xl font-bold text-purple-600">
-                {stats.withMaterials}
-              </p>
-            </div>
-            <div className="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
-              <FileText className="h-5 w-5 text-purple-600" />
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Chapters Table */}
@@ -217,15 +197,15 @@ const ChapterManagement = ({
                   Order
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Chapter
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Materials
+                  Chapter Title
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Materials
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -233,7 +213,7 @@ const ChapterManagement = ({
             <tbody className="divide-y divide-gray-200">
               {chapters
                 .sort((a, b) => a.order - b.order)
-                .map((chapter, index) => (
+                .map((chapter) => (
                   <tr
                     key={chapter.id}
                     className="hover:bg-gray-50 transition-colors duration-300"
@@ -243,58 +223,22 @@ const ChapterManagement = ({
                         <span className="text-sm font-medium text-gray-900">
                           {chapter.order}
                         </span>
-                        <div className="flex flex-col space-y-1">
-                          <button
-                            onClick={() => moveChapter(chapter, "up")}
-                            disabled={index === 0}
-                            className="text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                          >
-                            <ArrowUp className="h-3 w-3" />
+                        <div className="flex flex-col">
+                          <button>
+                            <ArrowUp className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                           </button>
-                          <button
-                            onClick={() => moveChapter(chapter, "down")}
-                            disabled={index === chapters.length - 1}
-                            className="text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                          >
-                            <ArrowDown className="h-3 w-3" />
+                          <button>
+                            <ArrowDown className="h-4 w-4 text-gray-400 hover:text-gray-600" />
                           </button>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {chapter.title}
-                        </div>
-                        <div className="text-sm text-gray-500 max-w-xs truncate">
-                          {chapter.description}
-                        </div>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {chapter.title}
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex space-x-2">
-                        {chapter.materials.notes && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-blue-100 text-blue-700">
-                            📝 Notes
-                          </span>
-                        )}
-                        {chapter.materials.solutions && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-green-100 text-green-700">
-                            ✅ Solutions
-                          </span>
-                        )}
-                        {chapter.materials.formulas && (
-                          <span className="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-purple-100 text-purple-700">
-                            🔢 Formulas
-                          </span>
-                        )}
-                        {!chapter.materials.notes &&
-                          !chapter.materials.solutions &&
-                          !chapter.materials.formulas && (
-                            <span className="text-xs text-gray-500">
-                              No materials
-                            </span>
-                          )}
+                      <div className="text-sm text-gray-500 line-clamp-1">
+                        {chapter.description}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -307,32 +251,35 @@ const ChapterManagement = ({
                       >
                         {chapter.isUnlocked ? (
                           <>
-                            <Unlock className="h-3 w-3 mr-1" />
-                            Published
+                            <Unlock className="h-3 w-3 mr-1" /> Unlocked
                           </>
                         ) : (
                           <>
-                            <Lock className="h-3 w-3 mr-1" />
-                            Draft
+                            <Lock className="h-3 w-3 mr-1" /> Locked
                           </>
                         )}
                       </span>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {
+                        Object.values(chapter.materials || {}).filter(Boolean)
+                          .length
+                      }{" "}
+                      files
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleEdit(chapter)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(chapter.id)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => handleEdit(chapter)}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        <Edit className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(chapter.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -355,7 +302,11 @@ const ChapterManagement = ({
                     setIsEditing(false);
                     setShowAddForm(false);
                     setSelectedChapter(null);
-                    setEditForm({});
+                    setUploadedFiles({
+                      notes: null,
+                      solutions: null,
+                      formulas: null,
+                    });
                   }}
                   className="text-gray-400 hover:text-gray-600"
                 >
@@ -365,79 +316,62 @@ const ChapterManagement = ({
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Basic Information */}
-              <div>
-                <h4 className="font-semibold text-gray-900 mb-4">
-                  Basic Information
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Chapter Title
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.title || ""}
-                      onChange={(e) =>
-                        setEditForm({ ...editForm, title: e.target.value })
-                      }
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Enter chapter title"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Chapter Order
-                    </label>
-                    <input
-                      type="number"
-                      value={editForm.order || ""}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          order: parseInt(e.target.value),
-                        })
-                      }
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="1"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4">
+              {/* Form Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description
+                    Chapter Title
                   </label>
-                  <textarea
-                    value={editForm.description || ""}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, description: e.target.value })
-                    }
-                    rows={3}
+                  <input
+                    type="text"
+                    value={editForm.title || ""}
+                    onChange={(e) => handleInputChange("title", e.target.value)}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Enter chapter description"
                   />
                 </div>
-
-                <div className="mt-4">
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={editForm.isUnlocked || false}
-                      onChange={(e) =>
-                        setEditForm({
-                          ...editForm,
-                          isUnlocked: e.target.checked,
-                        })
-                      }
-                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <span className="text-sm font-medium text-gray-700">
-                      Publish this chapter (make it visible to students)
-                    </span>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Chapter Order
                   </label>
+                  <input
+                    type="number"
+                    value={editForm.order || ""}
+                    onChange={(e) =>
+                      handleInputChange("order", parseInt(e.target.value))
+                    }
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={editForm.description || ""}
+                  onChange={(e) =>
+                    handleInputChange("description", e.target.value)
+                  }
+                  rows={4}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="isUnlocked"
+                  checked={editForm.isUnlocked || false}
+                  onChange={(e) =>
+                    handleInputChange("isUnlocked", e.target.checked)
+                  }
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label
+                  htmlFor="isUnlocked"
+                  className="ml-2 block text-sm text-gray-900"
+                >
+                  Unlocked for free users
+                </label>
               </div>
 
               {/* File Uploads */}
@@ -447,11 +381,11 @@ const ChapterManagement = ({
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <FileUpload
-                    chapterId={editForm.id || "temp-" + Date.now()}
-                    chapterTitle={editForm.title || "New Chapter"}
+                    chapterId={editForm.id}
+                    chapterTitle={editForm.title}
                     materialType="notes"
                     currentFile={editForm.materials?.notes}
-                    onFileUploaded={(type, filePath, publicUrl) => {
+                    onFileUploaded={(type, filePath) => {
                       setEditForm((prev) => ({
                         ...prev,
                         materials: {
@@ -459,16 +393,15 @@ const ChapterManagement = ({
                           [type]: filePath,
                         },
                       }));
-                      console.log(`✅ ${type} uploaded:`, filePath);
                     }}
                   />
 
                   <FileUpload
-                    chapterId={editForm.id || "temp-" + Date.now()}
-                    chapterTitle={editForm.title || "New Chapter"}
+                    chapterId={editForm.id}
+                    chapterTitle={editForm.title}
                     materialType="solutions"
                     currentFile={editForm.materials?.solutions}
-                    onFileUploaded={(type, filePath, publicUrl) => {
+                    onFileUploaded={(type, filePath) => {
                       setEditForm((prev) => ({
                         ...prev,
                         materials: {
@@ -476,16 +409,15 @@ const ChapterManagement = ({
                           [type]: filePath,
                         },
                       }));
-                      console.log(`✅ ${type} uploaded:`, filePath);
                     }}
                   />
 
                   <FileUpload
-                    chapterId={editForm.id || "temp-" + Date.now()}
-                    chapterTitle={editForm.title || "New Chapter"}
+                    chapterId={editForm.id}
+                    chapterTitle={editForm.title}
                     materialType="formulas"
                     currentFile={editForm.materials?.formulas}
-                    onFileUploaded={(type, filePath, publicUrl) => {
+                    onFileUploaded={(type, filePath) => {
                       setEditForm((prev) => ({
                         ...prev,
                         materials: {
@@ -493,29 +425,9 @@ const ChapterManagement = ({
                           [type]: filePath,
                         },
                       }));
-                      console.log(`✅ ${type} uploaded:`, filePath);
                     }}
                   />
                 </div>
-              </div>
-
-              {/* Upload Instructions */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <h5 className="font-medium text-blue-900 mb-2 flex items-center space-x-2">
-                  <AlertCircle className="h-5 w-5" />
-                  <span>Upload Guidelines</span>
-                </h5>
-                <ul className="space-y-1 text-sm text-blue-800">
-                  <li>• Only PDF files are accepted</li>
-                  <li>• Maximum file size is 10MB per file</li>
-                  <li>• Files are automatically organized by chapter</li>
-                  <li>
-                    • Students will be able to view and download these materials
-                  </li>
-                  <li>
-                    • Make sure content is properly formatted before uploading
-                  </li>
-                </ul>
               </div>
             </div>
 
@@ -526,7 +438,11 @@ const ChapterManagement = ({
                   setIsEditing(false);
                   setShowAddForm(false);
                   setSelectedChapter(null);
-                  setEditForm({});
+                  setUploadedFiles({
+                    notes: null,
+                    solutions: null,
+                    formulas: null,
+                  });
                 }}
                 className="px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors duration-300"
               >
@@ -534,7 +450,7 @@ const ChapterManagement = ({
               </button>
               <button
                 onClick={handleSave}
-                disabled={loading || !editForm.title || !editForm.description}
+                disabled={loading}
                 className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all duration-300 flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="h-4 w-4" />

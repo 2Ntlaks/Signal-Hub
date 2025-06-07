@@ -1,14 +1,6 @@
 import React, { useState, useRef } from "react";
-import {
-  Upload,
-  File,
-  X,
-  Check,
-  AlertCircle,
-  Download,
-  Loader,
-} from "lucide-react";
-import { supabase } from "../../lib/supabase";
+import { Upload, File, X, Check, AlertCircle, Download } from "lucide-react";
+import { supabaseHelpers, supabase } from "../../lib/supabase"; // Import supabase client directly
 
 const FileUpload = ({
   chapterId,
@@ -18,142 +10,130 @@ const FileUpload = ({
   onFileUploaded,
 }) => {
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const fileInputRef = useRef(null);
 
+  const isNewChapter = !chapterId;
+
   const materialTypes = {
-    notes: {
-      label: "Study Notes",
-      color: "blue",
-      accept: ".pdf",
-      icon: "📝",
-    },
+    notes: { label: "Study Notes", color: "blue", accept: ".pdf,.doc,.docx" },
     solutions: {
       label: "Solutions",
       color: "green",
-      accept: ".pdf",
-      icon: "✅",
+      accept: ".pdf,.doc,.docx",
     },
-    formulas: {
-      label: "Formulas",
-      color: "purple",
-      accept: ".pdf",
-      icon: "🔢",
-    },
+    formulas: { label: "Formulas", color: "purple", accept: ".pdf,.doc,.docx" },
   };
-
   const config = materialTypes[materialType];
 
-  const handleFileSelect = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      uploadFile(file);
-    }
-  };
-
   const uploadFile = async (file) => {
-    if (!file) return;
+    console.group(
+      `--- DEBUGGING UPLOAD FOR: ${materialType.toUpperCase()} ---`
+    );
 
-    // Validate file type
-    if (!file.type.includes("pdf")) {
-      setError("Please upload PDF files only");
+    if (isNewChapter) {
+      console.error(
+        "STOP: Cannot upload file because this is a new chapter without an ID."
+      );
+      setError("Please save the chapter first before uploading files.");
+      console.groupEnd();
       return;
     }
-
-    // Validate file size (max 10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      setError("File size must be less than 10MB");
+    if (!file) {
+      console.warn("STOP: No file selected.");
+      console.groupEnd();
       return;
     }
 
     setUploading(true);
     setError("");
     setSuccess("");
-    setUploadProgress(0);
 
     try {
-      // Create a unique file name to avoid conflicts
+      // Step 1: Check user session
+      console.log("STEP 1: Checking user session...");
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("User not authenticated. Aborting upload.");
+      }
+      console.log(
+        `...User is authenticated as: ${user.email} (ID: ${user.id})`
+      );
+
+      // Step 2: Construct file path
+      console.log("STEP 2: Constructing file path...");
       const fileExtension = file.name.split(".").pop();
-      const timestamp = Date.now();
-      const safeName = chapterTitle.toLowerCase().replace(/[^a-z0-9]/g, "-");
-      const fileName = `${safeName}-${materialType}-${timestamp}.${fileExtension}`;
-      const filePath = `chapters/${chapterId}/${materialType}/${fileName}`;
+      const fileName = `${materialType}-${Date.now()}.${fileExtension}`;
+      const filePath = `chapter-${chapterId}/${materialType}/${fileName}`;
+      console.log(`...File path is: ${filePath}`);
 
-      console.log(`📤 Uploading ${materialType} file:`, fileName);
-
-      // Upload to Supabase Storage
-      const { data, error: uploadError } = await supabase.storage
-        .from("chapter-materials")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: true,
-        });
+      // Step 3: Upload to Supabase Storage
+      console.log("STEP 3: Attempting to upload file to Supabase Storage...");
+      const { data: uploadData, error: uploadError } =
+        await supabaseHelpers.uploadFile("chapter-materials", filePath, file);
 
       if (uploadError) {
-        throw uploadError;
+        // This is a critical failure point.
+        console.error("--- !!! STORAGE UPLOAD FAILED !!! ---");
+        throw uploadError; // This will be caught by the catch block
       }
+      console.log(
+        "...File successfully uploaded to Storage. Response:",
+        uploadData
+      );
 
-      console.log("✅ File uploaded successfully:", data);
-
-      // Get the public URL
-      const { data: urlData } = supabase.storage
-        .from("chapter-materials")
-        .getPublicUrl(filePath);
-
-      // Update chapter record with new file path
-      const updateField = `${materialType}_file_path`;
-      const { error: updateError } = await supabase
-        .from("chapters")
-        .update({
-          [updateField]: filePath,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", chapterId);
+      // Step 4: Update the database
+      console.log(
+        "STEP 4: Attempting to update 'chapters' table in the database..."
+      );
+      const filePaths = { [materialType]: filePath };
+      const { data: updateData, error: updateError } =
+        await supabaseHelpers.updateChapterFiles(chapterId, filePaths);
 
       if (updateError) {
+        // This is the other critical failure point.
+        console.error("--- !!! DATABASE UPDATE FAILED !!! ---");
         throw updateError;
       }
+      console.log("...Database successfully updated. Response:", updateData);
 
-      setUploadProgress(100);
+      // If we reach here, everything was successful
+      console.log("--- SUCCESS: Upload process complete! ---");
       setSuccess(`${config.label} uploaded successfully!`);
-
-      // Call parent callback with both path and URL
       if (onFileUploaded) {
-        onFileUploaded(materialType, filePath, urlData.publicUrl);
+        onFileUploaded(materialType, filePath);
       }
-
-      // Clear form
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-
-      // Clear success message after 3 seconds
       setTimeout(() => setSuccess(""), 3000);
     } catch (err) {
-      console.error("Upload error:", err);
-      setError(err.message || "Failed to upload file. Please try again.");
+      console.error("Caught an error during the upload process:", err);
+      setError(err.message || "An unknown error occurred.");
     } finally {
+      console.log("--- FINALLY: Resetting UI state. ---");
       setUploading(false);
-      setUploadProgress(0);
+      console.groupEnd();
     }
   };
 
+  // The rest of the component's JSX remains the same.
+  // ... (handleDownload, handleDelete, and the return statement)
+
   const handleDownload = async () => {
     if (!currentFile) return;
-
     try {
-      // Get the public URL
-      const { data } = supabase.storage
-        .from("chapter-materials")
-        .getPublicUrl(currentFile);
-
-      // Open in new tab
-      window.open(data.publicUrl, "_blank");
+      const url = await supabaseHelpers.getFileUrl(
+        "chapter-materials",
+        currentFile
+      );
+      window.open(url, "_blank");
     } catch (error) {
       console.error("Download error:", error);
-      setError("Failed to download file");
+      alert("Failed to download file");
     }
   };
 
@@ -166,35 +146,22 @@ const FileUpload = ({
     ) {
       return;
     }
-
     try {
       setUploading(true);
-
-      // Delete from storage
-      const { error: deleteError } = await supabase.storage
-        .from("chapter-materials")
-        .remove([currentFile]);
-
+      const { error: deleteError } = await supabaseHelpers.deleteFile(
+        "chapter-materials",
+        currentFile
+      );
       if (deleteError) throw deleteError;
-
-      // Update chapter record
-      const updateField = `${materialType}_file_path`;
-      const { error: updateError } = await supabase
-        .from("chapters")
-        .update({
-          [updateField]: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", chapterId);
-
+      const { error: updateError } = await supabaseHelpers.updateChapterFiles(
+        chapterId,
+        { [materialType]: null }
+      );
       if (updateError) throw updateError;
-
       setSuccess(`${config.label} deleted successfully!`);
-
       if (onFileUploaded) {
         onFileUploaded(materialType, null);
       }
-
       setTimeout(() => setSuccess(""), 3000);
     } catch (error) {
       console.error("Delete error:", error);
@@ -204,133 +171,124 @@ const FileUpload = ({
     }
   };
 
-  const getFileName = (path) => {
-    if (!path) return "";
-    const parts = path.split("/");
-    return parts[parts.length - 1];
-  };
-
   return (
     <div
-      className={`border-2 border-dashed rounded-xl p-6 transition-all duration-300 ${
+      className={`border-2 border-dashed rounded-xl p-6 transition-colors duration-300 ${
         uploading
           ? "border-gray-400 bg-gray-50"
           : currentFile
           ? `border-${config.color}-300 bg-${config.color}-50`
-          : `border-gray-300 hover:border-${config.color}-400`
-      }`}
+          : `border-gray-300 ${
+              !isNewChapter && `hover:border-${config.color}-400`
+            }`
+      } ${isNewChapter ? "bg-gray-100" : ""}`}
     >
       <div className="text-center">
-        {/* Icon */}
         <div
-          className={`w-16 h-16 mx-auto mb-4 rounded-xl flex items-center justify-center transition-all duration-300 ${
-            currentFile ? `bg-${config.color}-100 scale-110` : "bg-gray-100"
+          className={`w-12 h-12 mx-auto mb-4 rounded-lg flex items-center justify-center ${
+            isNewChapter
+              ? "bg-gray-200"
+              : currentFile
+              ? `bg-${config.color}-100`
+              : "bg-gray-100"
           }`}
         >
-          {uploading ? (
-            <Loader className="h-8 w-8 animate-spin text-gray-500" />
-          ) : currentFile ? (
-            <span className="text-2xl">{config.icon}</span>
+          {currentFile ? (
+            <File className={`h-6 w-6 text-${config.color}-600`} />
           ) : (
-            <Upload className="h-8 w-8 text-gray-400" />
+            <Upload
+              className={`h-6 w-6 ${
+                isNewChapter ? "text-gray-400" : "text-gray-400"
+              }`}
+            />
           )}
         </div>
-
-        {/* Title */}
-        <h3 className="font-semibold text-gray-900 mb-2">{config.label}</h3>
-
-        {/* Status */}
+        <h3
+          className={`font-semibold mb-2 ${
+            isNewChapter ? "text-gray-500" : "text-gray-900"
+          }`}
+        >
+          {config.label}
+        </h3>
         {currentFile ? (
           <div className="space-y-3">
-            <div className="bg-white rounded-lg px-3 py-2 text-sm text-gray-700">
-              {getFileName(currentFile)}
-            </div>
-
+            <p className="text-sm text-gray-600 mb-3">
+              File uploaded successfully
+            </p>
             <div className="flex justify-center space-x-2">
               <button
                 onClick={handleDownload}
-                className={`flex items-center space-x-1 px-3 py-2 bg-${config.color}-100 text-${config.color}-700 rounded-lg hover:bg-${config.color}-200 transition-colors duration-300 text-sm font-medium`}
+                className={`flex items-center space-x-1 px-3 py-2 bg-${config.color}-100 text-${config.color}-700 rounded-lg hover:bg-${config.color}-200 transition-colors duration-300 text-sm`}
               >
                 <Download className="h-4 w-4" />
-                <span>Preview</span>
+                <span>Download</span>
               </button>
-
               <button
                 onClick={handleDelete}
                 disabled={uploading}
-                className="flex items-center space-x-1 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors duration-300 text-sm font-medium disabled:opacity-50"
+                className="flex items-center space-x-1 px-3 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors duration-300 text-sm disabled:opacity-50"
               >
                 <X className="h-4 w-4" />
                 <span>Delete</span>
               </button>
             </div>
-
-            <p className="text-xs text-gray-500">or upload a new file:</p>
-          </div>
-        ) : (
-          <p className="text-sm text-gray-600 mb-3">
-            Drop your PDF here or click to browse
-          </p>
-        )}
-
-        {/* Upload Progress */}
-        {uploading && uploadProgress > 0 && (
-          <div className="mb-4">
-            <div className="bg-gray-200 rounded-full h-2 mb-2 overflow-hidden">
-              <div
-                className={`bg-${config.color}-500 h-2 transition-all duration-300`}
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-            <p className="text-sm text-gray-600">
-              Uploading... {uploadProgress}%
+            <p className="text-xs text-gray-500">
+              Click to replace with new file:
             </p>
           </div>
+        ) : (
+          !isNewChapter && (
+            <p className="text-sm text-gray-600 mb-3">
+              Upload {config.label.toLowerCase()}
+            </p>
+          )
         )}
-
-        {/* File Input */}
+        {isNewChapter && (
+          <p className="text-xs text-yellow-800 bg-yellow-100 border border-yellow-200 rounded-md p-2">
+            First, save the chapter to enable file uploads.
+          </p>
+        )}
+        {uploading && (
+          <div className="mb-4">
+            <p className="text-sm text-gray-600">Uploading...</p>
+          </div>
+        )}
         <input
           ref={fileInputRef}
           type="file"
           accept={config.accept}
-          onChange={handleFileSelect}
-          disabled={uploading}
+          onChange={(e) => uploadFile(e.target.files[0])}
+          disabled={uploading || isNewChapter}
           className="hidden"
         />
-
-        {/* Upload Button */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className={`mt-4 w-full bg-${config.color}-500 text-white px-4 py-2 rounded-lg hover:bg-${config.color}-600 transition-colors duration-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          {uploading
-            ? "Uploading..."
-            : currentFile
-            ? "Replace File"
-            : "Choose PDF"}
-        </button>
-
-        {/* File Type Info */}
-        <p className="text-xs text-gray-500 mt-2">PDF files only • Max 10MB</p>
-
-        {/* Success Message */}
+        {!isNewChapter && (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading || isNewChapter}
+            className={`w-full mt-3 bg-${config.color}-50 text-${config.color}-700 px-4 py-2 rounded-lg hover:bg-${config.color}-100 transition-colors duration-300 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {uploading
+              ? "Uploading..."
+              : currentFile
+              ? "Replace File"
+              : "Choose File"}
+          </button>
+        )}
+        {!isNewChapter && (
+          <p className="text-xs text-gray-500 mt-2">
+            PDF, DOC, DOCX • Max 10MB
+          </p>
+        )}
         {success && (
-          <div className="mt-3 p-2 bg-green-100 rounded-lg">
-            <div className="flex items-center justify-center space-x-2 text-green-700">
-              <Check className="h-4 w-4" />
-              <span className="text-sm font-medium">{success}</span>
-            </div>
+          <div className="mt-3 flex items-center justify-center space-x-2 text-green-600">
+            <Check className="h-4 w-4" />
+            <span className="text-sm font-medium">{success}</span>
           </div>
         )}
-
-        {/* Error Message */}
         {error && (
-          <div className="mt-3 p-2 bg-red-100 rounded-lg">
-            <div className="flex items-center justify-center space-x-2 text-red-700">
-              <AlertCircle className="h-4 w-4" />
-              <span className="text-sm font-medium">{error}</span>
-            </div>
+          <div className="mt-3 flex items-center justify-center space-x-2 text-red-600">
+            <AlertCircle className="h-4 w-4" />
+            <span className="text-sm font-medium">{error}</span>
           </div>
         )}
       </div>
