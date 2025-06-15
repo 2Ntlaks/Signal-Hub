@@ -10,9 +10,11 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { supabaseHelpers } from "../../lib/supabase";
+import toast from "react-hot-toast";
 
 const StudentAuth = ({ onAuthSuccess }) => {
-  const [isLogin, setIsLogin] = useState(true);
+  // We now have three modes: 'login', 'signup', and 'resetPassword'
+  const [authMode, setAuthMode] = useState("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -27,220 +29,94 @@ const StudentAuth = ({ onAuthSuccess }) => {
   });
 
   const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-    setError(""); // Clear errors when user types
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+    setError("");
+    setSuccess("");
   };
 
-  const validateForm = () => {
-    if (!formData.email || !formData.password) {
-      setError("Email and password are required");
-      return false;
-    }
-
-    if (!isLogin) {
-      if (!formData.name || !formData.studentNumber) {
-        setError("Name and student number are required");
-        return false;
-      }
-
-      if (formData.password !== formData.confirmPassword) {
-        setError("Passwords do not match");
-        return false;
-      }
-
-      if (formData.password.length < 6) {
-        setError("Password must be at least 6 characters");
-        return false;
-      }
-
-      if (!formData.email.includes("@")) {
-        setError("Please enter a valid email address");
-        return false;
-      }
-    }
-
-    return true;
-  };
-
-  const handleSubmit = async (e) => {
+  const handlePasswordResetRequest = async (e) => {
     e.preventDefault();
-
-    if (!validateForm()) return;
-
+    if (!formData.email) {
+      setError("Please enter your email address.");
+      return;
+    }
     setLoading(true);
     setError("");
     setSuccess("");
 
-    try {
-      if (isLogin) {
-        // Login existing user
-        const { data, error } = await supabaseHelpers.signIn(
-          formData.email,
-          formData.password
-        );
+    const { error: resetError } = await supabaseHelpers.resetPasswordForEmail(
+      formData.email
+    );
 
-        if (error) {
-          setError(error.message);
-          return;
-        }
-
-        if (data.user) {
-          // Get user profile
-          const { data: profile, error: profileError } =
-            await supabaseHelpers.getProfile(data.user.id);
-
-          if (profileError) {
-            console.error("Profile error:", profileError);
-          }
-
-          onAuthSuccess(data.user, profile);
-        }
-      } else {
-        // Signup new user
-        const { data, error } = await supabaseHelpers.signUp(
-          formData.email,
-          formData.password,
-          {
-            name: formData.name,
-            student_number: formData.studentNumber,
-            university: "CPUT",
-          }
-        );
-
-        if (error) {
-          setError(error.message);
-          return;
-        }
-
-        if (data.user) {
-          setSuccess(
-            "Account created successfully! Please check your email to verify your account."
-          );
-
-          // Create profile in database
-          try {
-            await fetch(
-              `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/profiles`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-                  Authorization: `Bearer ${
-                    import.meta.env.VITE_SUPABASE_ANON_KEY
-                  }`,
-                },
-                body: JSON.stringify({
-                  id: data.user.id,
-                  name: formData.name,
-                  email: formData.email,
-                  student_number: formData.studentNumber,
-                  tier: "free",
-                  university: "CPUT",
-                }),
-              }
-            );
-          } catch (profileErr) {
-            console.error("Profile creation error:", profileErr);
-          }
-        }
-      }
-    } catch (err) {
-      setError(err.message || "Something went wrong. Please try again.");
-    } finally {
-      setLoading(false);
+    if (resetError) {
+      setError(resetError.message);
+    } else {
+      setSuccess(
+        "If an account with that email exists, a password reset link has been sent."
+      );
+      toast.success("Password reset link sent!");
     }
+    setLoading(false);
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 flex items-center justify-center p-4">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-40 w-80 h-80 bg-white bg-opacity-10 rounded-full blur-3xl"></div>
-        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-purple-300 bg-opacity-20 rounded-full blur-3xl"></div>
-      </div>
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
 
-      <div className="relative bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-        {/* Logo & Header */}
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <GraduationCap className="h-8 w-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            {isLogin ? "Welcome Back!" : "Join CPUT Signal Hub"}
-          </h1>
-          <p className="text-gray-600">
-            {isLogin
-              ? "Sign in to continue your Signal Processing journey"
-              : "Create your account to get started"}
-          </p>
-        </div>
+    if (authMode === "login") {
+      const { data, error } = await supabaseHelpers.signIn(
+        formData.email,
+        formData.password
+      );
+      if (error) setError(error.message);
+      if (data.user) onAuthSuccess(data.user, data.profile);
+    } else {
+      // Signup
+      if (formData.password !== formData.confirmPassword) {
+        setError("Passwords do not match");
+        setLoading(false);
+        return;
+      }
+      const { data, error } = await supabaseHelpers.signUp(
+        formData.email,
+        formData.password,
+        {
+          name: formData.name,
+          student_number: formData.studentNumber,
+        }
+      );
 
-        {/* Error/Success Messages */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-3">
-            <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-            <p className="text-red-800 text-sm">{error}</p>
-          </div>
-        )}
+      if (error) {
+        setError(error.message);
+      } else {
+        setSuccess(
+          "Account created! Please check your email to verify your account before logging in."
+        );
+        toast.success("Account created successfully!");
+        // Switch to login view after successful signup
+        setAuthMode("login");
+      }
+    }
+    setLoading(false);
+  };
 
-        {success && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-xl flex items-center space-x-3">
-            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-            <p className="text-green-800 text-sm">{success}</p>
-          </div>
-        )}
+  // Switch between Login and Signup views
+  const switchMode = (mode) => {
+    setAuthMode(mode);
+    setError("");
+    setSuccess("");
+    setShowPassword(false);
+  };
 
-        {/* Auth Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Name & Student Number (Signup only) */}
-          {!isLogin && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="John Doe"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Student Number
-                </label>
-                <div className="relative">
-                  <GraduationCap className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="studentNumber"
-                    value={formData.studentNumber}
-                    onChange={handleInputChange}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="123456789"
-                    required
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Email */}
+  const renderContent = () => {
+    if (authMode === "resetPassword") {
+      return (
+        <form onSubmit={handlePasswordResetRequest} className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {isLogin ? "Email Address" : "CPUT Email Address"}
+              Email Address
             </label>
             <div className="relative">
               <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
@@ -249,104 +125,210 @@ const StudentAuth = ({ onAuthSuccess }) => {
                 name="email"
                 value={formData.email}
                 onChange={handleInputChange}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={
-                  isLogin ? "your.email@example.com" : "student@cput.ac.za"
-                }
+                className="w-full pl-10 pr-4 py-3 border rounded-xl"
+                placeholder="your.email@example.com"
                 required
               />
             </div>
           </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-3 rounded-xl disabled:opacity-50"
+          >
+            {loading ? "Sending..." : "Send Reset Link"}
+          </button>
+        </form>
+      );
+    }
 
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Password
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter your password"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-              >
-                {showPassword ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Confirm Password (Signup only) */}
-          {!isLogin && (
+    return (
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {authMode === "signup" && (
+          <>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Confirm Password
+                Full Name
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input
-                  type={showPassword ? "text" : "password"}
-                  name="confirmPassword"
-                  value={formData.confirmPassword}
+                  type="text"
+                  name="name"
+                  value={formData.name}
                   onChange={handleInputChange}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Confirm your password"
+                  className="w-full pl-10 pr-4 py-3 border rounded-xl"
+                  placeholder="John Doe"
                   required
                 />
               </div>
             </div>
-          )}
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 transition-all duration-300 font-medium"
-          >
-            {loading
-              ? isLogin
-                ? "Signing in..."
-                : "Creating account..."
-              : isLogin
-              ? "Sign In"
-              : "Create Account"}
-          </button>
-        </form>
-
-        {/* Toggle Auth Mode */}
-        <div className="mt-6 text-center">
-          <p className="text-gray-600 text-sm">
-            {isLogin ? "Don't have an account?" : "Already have an account?"}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Student Number
+              </label>
+              <div className="relative">
+                <GraduationCap className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  name="studentNumber"
+                  value={formData.studentNumber}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-3 border rounded-xl"
+                  placeholder="123456789"
+                  required
+                />
+              </div>
+            </div>
+          </>
+        )}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Email Address
+          </label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+            <input
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              className="w-full pl-10 pr-4 py-3 border rounded-xl"
+              placeholder="student@cput.ac.za"
+              required
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Password
+          </label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              value={formData.password}
+              onChange={handleInputChange}
+              className="w-full pl-10 pr-12 py-3 border rounded-xl"
+              placeholder="Enter your password"
+              required
+            />
             <button
-              onClick={() => {
-                setIsLogin(!isLogin);
-                setError("");
-                setSuccess("");
-                setFormData({
-                  email: "",
-                  password: "",
-                  name: "",
-                  studentNumber: "",
-                  confirmPassword: "",
-                });
-              }}
-              className="ml-1 text-blue-600 hover:text-blue-700 font-medium"
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-3 text-gray-400"
             >
-              {isLogin ? "Sign up" : "Sign in"}
+              <EyeOff className="h-5 w-5" />
             </button>
+          </div>
+        </div>
+        {authMode === "signup" && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Confirm Password
+            </label>
+            <input
+              type="password"
+              name="confirmPassword"
+              value={formData.confirmPassword}
+              onChange={handleInputChange}
+              className="w-full px-4 py-3 border rounded-xl"
+              placeholder="Confirm your password"
+              required
+            />
+          </div>
+        )}
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-xl disabled:opacity-50"
+        >
+          {loading
+            ? authMode === "login"
+              ? "Signing in..."
+              : "Creating account..."
+            : authMode === "login"
+            ? "Sign In"
+            : "Create Account"}
+        </button>
+      </form>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-600 via-purple-600 to-indigo-700 flex items-center justify-center p-4">
+      <div className="relative bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            {authMode === "login" && "Welcome Back!"}
+            {authMode === "signup" && "Join CPUT Signal Hub"}
+            {authMode === "resetPassword" && "Reset Your Password"}
+          </h1>
+          <p className="text-gray-600">
+            {authMode === "login" && "Sign in to continue your journey"}
+            {authMode === "signup" && "Create your account to get started"}
+            {authMode === "resetPassword" &&
+              "We'll send you a link to reset your password"}
           </p>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 text-red-800 rounded-xl flex items-center">
+            <AlertCircle className="h-5 w-5 mr-2" />
+            {error}
+          </div>
+        )}
+        {success && (
+          <div className="mb-4 p-4 bg-green-50 text-green-800 rounded-xl flex items-center">
+            <CheckCircle className="h-5 w-5 mr-2" />
+            {success}
+          </div>
+        )}
+
+        {renderContent()}
+
+        <div className="mt-6 text-center text-sm text-gray-600">
+          {authMode === "login" && (
+            <>
+              Don't have an account?{" "}
+              <button
+                onClick={() => switchMode("signup")}
+                className="font-medium text-blue-600 hover:underline"
+              >
+                Sign up
+              </button>
+              <br />
+              <button
+                onClick={() => switchMode("resetPassword")}
+                className="font-medium text-blue-600 hover:underline mt-2"
+              >
+                Forgot Password?
+              </button>
+            </>
+          )}
+          {authMode === "signup" && (
+            <>
+              Already have an account?{" "}
+              <button
+                onClick={() => switchMode("login")}
+                className="font-medium text-blue-600 hover:underline"
+              >
+                Sign in
+              </button>
+            </>
+          )}
+          {authMode === "resetPassword" && (
+            <>
+              Remember your password?{" "}
+              <button
+                onClick={() => switchMode("login")}
+                className="font-medium text-blue-600 hover:underline"
+              >
+                Sign in
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

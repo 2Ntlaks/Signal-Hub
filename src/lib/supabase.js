@@ -25,7 +25,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-// Helper functions remain the same as before...
 export const supabaseHelpers = {
   // Authentication
   async signUp(email, password, metadata = {}) {
@@ -156,7 +155,6 @@ export const supabaseHelpers = {
     }
   },
 
-  // --- NEW SEARCH FUNCTION ADDED HERE ---
   async searchChapters(searchTerm) {
     try {
       const { data, error } = await supabase.rpc("search_chapters", {
@@ -336,6 +334,42 @@ export const supabaseHelpers = {
         progress: [],
         errors: { general: err },
       };
+    }
+  },
+
+  // Platform Settings
+  async getSettings() {
+    try {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("*");
+      if (error) throw error;
+
+      const settings = data.reduce((acc, setting) => {
+        acc[setting.key] = setting.value;
+        return acc;
+      }, {});
+
+      return { data: settings, error: null };
+    } catch (err) {
+      console.error("Get settings error:", err);
+      return { data: null, error: err };
+    }
+  },
+
+  async updateSetting(key, value) {
+    try {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .update({ value: value })
+        .eq("key", key)
+        .select();
+
+      if (error) throw error;
+      return { data, error: null };
+    } catch (err) {
+      console.error("Update setting error:", err);
+      return { data: null, error: err };
     }
   },
 
