@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Toaster } from "react-hot-toast";
 import Header from "./components/Header";
 import Sidebar from "./components/Sidebar";
 import Dashboard from "./components/Dashboard";
@@ -14,10 +15,11 @@ import UserManagement from "./components/admin/UserManagement";
 import Analytics from "./components/admin/Analytics";
 import Settings from "./components/admin/Settings";
 import StudentAuth from "./components/auth/StudentAuth";
+import UpdatePassword from "./components/auth/UpdatePassword";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { useChapters } from "./hooks/useChapters";
 
-// Main App Component (now with authentication)
+// Main App Component
 const AppContent = () => {
   const [currentView, setCurrentView] = useState("dashboard");
   const [selectedChapter, setSelectedChapter] = useState(null);
@@ -29,19 +31,20 @@ const AppContent = () => {
     user,
     profile,
     loading: authLoading,
+    isPasswordRecovery,
     signOut,
-    getCompletedChapterIds,
-    getBookmarkedChapterIds,
-  } = useAuth(); // Add signOut here
+  } = useAuth();
+
   const {
     chapters,
     loading: chaptersLoading,
+    error: chaptersError,
     addChapter,
     updateChapter,
     deleteChapter,
   } = useChapters();
 
-  // Auto-detect admin users (moved to useEffect to prevent infinite re-renders)
+  // Auto-detect admin users
   useEffect(() => {
     if (user && user.email === "ntlakaniphomgaguli210@gmail.com" && !isAdmin) {
       console.log("🔧 Admin user detected, redirecting to admin panel...");
@@ -50,23 +53,31 @@ const AppContent = () => {
     }
   }, [user, isAdmin]);
 
-  // Add this function for quick sign out
-  const handleQuickSignOut = () => {
-    console.log("🚪 Clearing session and reloading...");
+  // Check for password recovery flow
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const type = urlParams.get("type");
 
-    // Clear all browser storage
-    localStorage.clear();
-    sessionStorage.clear();
+    if (type === "recovery") {
+      console.log("Password recovery flow detected");
+      // The AuthContext will handle setting isPasswordRecovery
+    }
+  }, []);
 
-    // Clear any cookies
-    document.cookie.split(";").forEach(function (c) {
-      document.cookie = c
-        .replace(/^ +/, "")
-        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-    });
-
-    // Force reload to fresh state
-    window.location.href = window.location.origin;
+  // Handle quick sign out for testing
+  const handleQuickSignOut = async () => {
+    console.log("🚪 Signing out...");
+    try {
+      await signOut();
+      // Clear local state
+      setIsAdmin(false);
+      setAdminLoggedIn(false);
+      setCurrentView("dashboard");
+      // Clear URL parameters
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } catch (error) {
+      console.error("Sign out error:", error);
+    }
   };
 
   const handleChapterClick = (chapter) => {
@@ -86,12 +97,16 @@ const AppContent = () => {
   };
 
   const handleStudentAuthSuccess = (user, profile) => {
-    // User is now authenticated, the AuthContext will handle the state
-    console.log("Student authenticated:", user, profile);
+    console.log("Student authenticated:", user?.email);
   };
 
+  // Show password recovery component if in recovery flow
+  if (isPasswordRecovery && user) {
+    return <UpdatePassword />;
+  }
+
   // Show loading while checking authentication
-  if (authLoading || chaptersLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -144,16 +159,6 @@ const AppContent = () => {
               className="block mx-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               Refresh Page
-            </button>
-
-            <button
-              onClick={() => {
-                // Force stop loading to see what happens
-                console.log("🔧 Force continuing...");
-              }}
-              className="block mx-auto px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-            >
-              Force Continue (Skip Loading)
             </button>
           </div>
         </div>
@@ -209,9 +214,27 @@ const AppContent = () => {
 
   // Student Interface (authenticated users)
   const renderContent = () => {
+    // Show error if chapters failed to load
+    if (chaptersError) {
+      return (
+        <div className="max-w-2xl mx-auto mt-8 p-6 bg-red-50 border border-red-200 rounded-lg">
+          <h3 className="text-lg font-semibold text-red-900 mb-2">
+            Failed to Load Chapters
+          </h3>
+          <p className="text-red-700 mb-4">{chaptersError}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700"
+          >
+            Retry
+          </button>
+        </div>
+      );
+    }
+
     switch (currentView) {
       case "dashboard":
-        return <Dashboard user={profile} chapters={chapters} />;
+        return <Dashboard chapters={chapters} loading={chaptersLoading} />;
       case "chapters":
         return (
           <div className="space-y-8">
@@ -224,16 +247,28 @@ const AppContent = () => {
                 Each chapter builds upon the previous one.
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {chapters.map((chapter) => (
-                <ChapterCard
-                  key={chapter.id}
-                  chapter={chapter}
-                  user={profile}
-                  onChapterClick={handleChapterClick}
-                />
-              ))}
-            </div>
+
+            {chaptersLoading ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {[...Array(6)].map((_, i) => (
+                  <div
+                    key={i}
+                    className="bg-gray-200 animate-pulse rounded-2xl h-64"
+                  ></div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {chapters.map((chapter) => (
+                  <ChapterCard
+                    key={chapter.id}
+                    chapter={chapter}
+                    user={profile}
+                    onChapterClick={handleChapterClick}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         );
       case "chapter-detail":
@@ -248,7 +283,7 @@ const AppContent = () => {
       case "concept-explainer":
         return <ConceptExplainer />;
       default:
-        return <Dashboard user={profile} chapters={chapters} />;
+        return <Dashboard chapters={chapters} loading={chaptersLoading} />;
     }
   };
 
@@ -271,21 +306,41 @@ const AppContent = () => {
           {renderContent()}
 
           {/* Admin Access Button - Hidden in production */}
-          <button
-            onClick={() => setIsAdmin(true)}
-            className="fixed bottom-4 right-4 bg-red-600 text-white p-3 rounded-full shadow-lg hover:bg-red-700 transition-colors duration-300 text-sm font-medium z-50"
-            title="Admin Access (Development Only)"
-          >
-            🔧 Admin
-          </button>
+          {process.env.NODE_ENV === "development" && !isAdmin && (
+            <button
+              onClick={() => setIsAdmin(true)}
+              className="fixed bottom-4 right-4 bg-red-600 text-white p-3 rounded-full shadow-lg hover:bg-red-700 transition-colors duration-300 text-sm font-medium z-50"
+              title="Admin Access (Development Only)"
+            >
+              🔧 Admin
+            </button>
+          )}
         </main>
       </div>
+
+      {/* Toast notifications */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: "#363636",
+            color: "#fff",
+          },
+          success: {
+            duration: 3000,
+            theme: {
+              primary: "green",
+              secondary: "black",
+            },
+          },
+        }}
+      />
     </div>
   );
 };
 
 // Wrap the entire app with AuthProvider
-
 function App() {
   return (
     <AuthProvider>

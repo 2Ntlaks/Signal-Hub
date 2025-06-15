@@ -9,19 +9,13 @@ import {
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 
-const ChapterCard = ({
-  chapter,
-  user,
-  onChapterClick,
-  completedChapters = [],
-  bookmarkedChapters = [],
-}) => {
+const ChapterCard = ({ chapter, user, onChapterClick }) => {
   const [isBookmarking, setIsBookmarking] = useState(false);
-  const { toggleBookmark } = useAuth();
+  const { toggleBookmark, isChapterCompleted, isChapterBookmarked } = useAuth();
 
   const isLocked = !chapter.isUnlocked && user?.tier === "free";
-  const isCompleted = completedChapters.includes(chapter.id);
-  const isBookmarked = bookmarkedChapters.includes(chapter.id);
+  const isCompleted = isChapterCompleted(chapter.id);
+  const isBookmarked = isChapterBookmarked(chapter.id);
 
   const handleBookmarkToggle = async (e) => {
     e.stopPropagation(); // Prevent card click

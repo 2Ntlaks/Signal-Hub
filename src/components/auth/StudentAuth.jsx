@@ -12,8 +12,8 @@ import {
 import { supabaseHelpers } from "../../lib/supabase";
 import toast from "react-hot-toast";
 
-const StudentAuth = ({ onAuthSuccess }) => {
-  // We now have three modes: 'login', 'signup', and 'resetPassword'
+const StudentAuth = () => {
+  // ✅ REMOVED: onAuthSuccess prop
   const [authMode, setAuthMode] = useState("login");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -70,8 +70,14 @@ const StudentAuth = ({ onAuthSuccess }) => {
         formData.email,
         formData.password
       );
-      if (error) setError(error.message);
-      if (data.user) onAuthSuccess(data.user, data.profile);
+      if (error) {
+        setError(error.message);
+      }
+      // ✅ REMOVED: onAuthSuccess call - AuthContext handles this automatically
+      if (data.user) {
+        console.log("✅ User signed in successfully:", data.user.email);
+        // The AuthContext will automatically detect the user and load their data
+      }
     } else {
       // Signup
       if (formData.password !== formData.confirmPassword) {

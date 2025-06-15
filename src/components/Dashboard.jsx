@@ -1,13 +1,27 @@
 import React from "react";
-import { TrendingUp, Star, Award, Clock } from "lucide-react";
-import { useAuth } from "../contexts/AuthContext"; // ➕ ADDED: Import useAuth
+import {
+  TrendingUp,
+  Star,
+  Award,
+  Clock,
+  ArrowRight,
+  BookOpen,
+} from "lucide-react";
+import { useAuth } from "../contexts/AuthContext";
 
-// ✏️ MODIFIED: Accept a 'loading' prop and get data from useAuth
-const Dashboard = ({ chapters, loading }) => {
-  const { profile, userProgress, userBookmarks } = useAuth();
+const Dashboard = ({ chapters = [], loading: chaptersLoading = false }) => {
+  const {
+    profile,
+    userProgress,
+    userBookmarks,
+    loading: authLoading,
+    getCompletedChapterIds,
+    getBookmarkedChapterIds,
+    isChapterCompleted,
+  } = useAuth();
 
-  // Show a skeleton loader while chapters are loading or if the user profile isn't available yet
-  if (loading || !profile) {
+  // Show loading state while auth or chapters are loading
+  if (authLoading || chaptersLoading || !profile) {
     return (
       <div className="space-y-8 animate-pulse">
         <div className="relative overflow-hidden bg-gray-200 rounded-2xl p-8 h-48"></div>
@@ -22,14 +36,23 @@ const Dashboard = ({ chapters, loading }) => {
   }
 
   const totalChapters = chapters.length;
-  // ✏️ MODIFIED: Calculate stats from the correct context variables
-  const completedChapters = userProgress.filter(
-    (p) => p.progress_percentage === 100
-  ).length;
-  const bookmarkedCount = userBookmarks.length;
+  const completedChapterIds = getCompletedChapterIds();
+  const bookmarkedChapterIds = getBookmarkedChapterIds();
+  const completedChapters = completedChapterIds.length;
+  const bookmarkedCount = bookmarkedChapterIds.length;
 
   const progressPercentage =
     totalChapters > 0 ? (completedChapters / totalChapters) * 100 : 0;
+
+  // Get next chapter to study
+  const nextChapter = chapters.find(
+    (chapter) => !isChapterCompleted(chapter.id)
+  );
+
+  // Get recently completed chapters
+  const recentlyCompleted = chapters
+    .filter((chapter) => isChapterCompleted(chapter.id))
+    .slice(-3);
 
   return (
     <div className="space-y-8">
@@ -68,6 +91,24 @@ const Dashboard = ({ chapters, loading }) => {
               </div>
             </div>
           </div>
+
+          {/* Next Chapter CTA */}
+          {nextChapter && (
+            <div className="mt-4 bg-white bg-opacity-10 rounded-xl p-4 backdrop-blur-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-blue-100 text-sm">Continue Learning</p>
+                  <p className="text-white font-semibold">
+                    Chapter {nextChapter.order}: {nextChapter.title}
+                  </p>
+                </div>
+                <div className="flex items-center text-white">
+                  <span className="text-sm mr-2">Continue</span>
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Floating Elements */}
@@ -110,7 +151,7 @@ const Dashboard = ({ chapters, loading }) => {
           <h3 className="font-semibold text-gray-900 mb-1">Bookmarked</h3>
           <p className="text-gray-500 text-sm">Saved for quick access</p>
           <div className="mt-3 flex space-x-1">
-            {[...Array(5)].map((_, i) => (
+            {[...Array(Math.min(5, totalChapters))].map((_, i) => (
               <div
                 key={i}
                 className={`h-2 w-full rounded-full ${
@@ -146,61 +187,116 @@ const Dashboard = ({ chapters, loading }) => {
         </div>
       </div>
 
-      {/* Continue Learning Section */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-lg p-8">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">
-              Continue Learning 📚
-            </h3>
-            <p className="text-gray-600">Pick up where you left off</p>
+      {/* Learning Activities */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Continue Learning Section */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                Continue Learning 📚
+              </h3>
+              <p className="text-gray-600">Pick up where you left off</p>
+            </div>
+            <BookOpen className="h-6 w-6 text-blue-500" />
           </div>
-          <button className="bg-gradient-to-r from-blue-500 to-purple-500 text-white px-6 py-3 rounded-xl hover:from-blue-600 hover:to-purple-600 transition-all duration-300 font-medium shadow-lg hover:shadow-xl">
-            View All Chapters
-          </button>
+
+          <div className="space-y-4">
+            {chapters.slice(0, 3).map((chapter) => {
+              const completed = isChapterCompleted(chapter.id);
+              return (
+                <div
+                  key={chapter.id}
+                  className="group relative bg-gradient-to-br from-gray-50 to-white border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all duration-300 cursor-pointer hover:-translate-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <div
+                        className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                          completed
+                            ? "bg-green-100 text-green-600"
+                            : "bg-blue-100 text-blue-600"
+                        }`}
+                      >
+                        <span className="font-bold text-sm">
+                          {chapter.order}
+                        </span>
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-gray-900 text-sm">
+                          {chapter.title}
+                        </h4>
+                        <p className="text-gray-500 text-xs">
+                          {completed ? "Completed" : "Ready to start"}
+                        </p>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-gray-400 group-hover:text-blue-600 transition-colors duration-300" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {chapters.slice(0, 4).map((chapter, index) => (
-            <div
-              key={chapter.id}
-              className="group relative bg-gradient-to-br from-gray-50 to-white border border-gray-100 rounded-xl p-6 hover:shadow-lg transition-all duration-300 cursor-pointer hover:-translate-y-1"
-            >
-              <div className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-full flex items-center justify-center text-sm font-bold shadow-lg">
-                {chapter.order}
-              </div>
+        {/* Recent Activity */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-lg p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                Recent Activity ⚡
+              </h3>
+              <p className="text-gray-600">Your recent achievements</p>
+            </div>
+            <Award className="h-6 w-6 text-purple-500" />
+          </div>
 
-              <div className="flex justify-between items-start mb-3">
-                <span className="bg-gradient-to-r from-blue-100 to-purple-100 text-blue-800 px-3 py-1 rounded-full text-xs font-medium">
-                  Chapter {chapter.order}
-                </span>
-                {userProgress.some(
-                  (p) =>
-                    p.chapter_id === chapter.id && p.progress_percentage === 100
-                ) && (
-                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-xs font-bold">✓</span>
+          <div className="space-y-4">
+            {recentlyCompleted.length > 0 ? (
+              recentlyCompleted.map((chapter) => (
+                <div
+                  key={chapter.id}
+                  className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg"
+                >
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                    <Award className="h-4 w-4 text-green-600" />
                   </div>
-                )}
-              </div>
-
-              <h4 className="font-bold text-gray-900 mb-2 group-hover:text-blue-600 transition-colors duration-300">
-                {chapter.title}
-              </h4>
-              <p className="text-gray-600 text-sm line-clamp-2 mb-4">
-                {chapter.description}
-              </p>
-
-              <div className="flex items-center space-x-2 text-xs text-gray-500">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
-                  <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-gray-900">
+                      Completed Chapter {chapter.order}
+                    </p>
+                    <p className="text-xs text-gray-600">{chapter.title}</p>
+                  </div>
                 </div>
-                <span>Ready to start</span>
+              ))
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <BookOpen className="h-8 w-8 text-gray-400" />
+                </div>
+                <p className="text-gray-600 text-sm">
+                  Start learning to see your activity here
+                </p>
+              </div>
+            )}
+
+            {/* Study streak placeholder */}
+            <div className="mt-6 p-4 bg-gradient-to-r from-orange-50 to-yellow-50 rounded-lg border border-orange-100">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                  <span className="text-orange-600 font-bold text-sm">🔥</span>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-orange-900">
+                    Keep your streak going!
+                  </p>
+                  <p className="text-xs text-orange-700">
+                    Complete a chapter today to maintain momentum
+                  </p>
+                </div>
               </div>
             </div>
-          ))}
+          </div>
         </div>
       </div>
     </div>

@@ -26,7 +26,10 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 export const supabaseHelpers = {
-  // Authentication
+  // =============================================
+  // AUTHENTICATION METHODS
+  // =============================================
+
   async signUp(email, password, metadata = {}) {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -66,6 +69,30 @@ export const supabaseHelpers = {
     }
   },
 
+  async resetPasswordForEmail(email) {
+    try {
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/update-password`,
+      });
+      return { data, error };
+    } catch (err) {
+      console.error("Reset password error:", err);
+      return { data: null, error: err };
+    }
+  },
+
+  async updateUserPassword(password) {
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: password,
+      });
+      return { data, error };
+    } catch (err) {
+      console.error("Update password error:", err);
+      return { data: null, error: err };
+    }
+  },
+
   async getCurrentUser() {
     try {
       const {
@@ -78,7 +105,10 @@ export const supabaseHelpers = {
     }
   },
 
-  // Profiles
+  // =============================================
+  // PROFILE MANAGEMENT
+  // =============================================
+
   async getProfile(userId) {
     try {
       const { data, error } = await supabase
@@ -127,14 +157,17 @@ export const supabaseHelpers = {
     }
   },
 
-  // Chapters
+  // =============================================
+  // CHAPTER MANAGEMENT
+  // =============================================
+
   async getChapters() {
     try {
       const { data, error } = await supabase
         .from("chapters")
         .select("*")
         .order("chapter_order");
-      return { data, error };
+      return { data: data || [], error };
     } catch (err) {
       console.error("Get chapters error:", err);
       return { data: [], error: err };
@@ -160,10 +193,10 @@ export const supabaseHelpers = {
       const { data, error } = await supabase.rpc("search_chapters", {
         search_term: searchTerm,
       });
-      return { data, error };
+      return { data: data || [], error };
     } catch (err) {
       console.error("Search chapters error:", err);
-      return { data: null, error: err };
+      return { data: [], error: err };
     }
   },
 
@@ -212,7 +245,10 @@ export const supabaseHelpers = {
     }
   },
 
-  // User Progress
+  // =============================================
+  // USER PROGRESS TRACKING
+  // =============================================
+
   async getUserProgress(userId) {
     try {
       const { data, error } = await supabase
@@ -267,7 +303,10 @@ export const supabaseHelpers = {
     }
   },
 
-  // Bookmarks
+  // =============================================
+  // BOOKMARK MANAGEMENT
+  // =============================================
+
   async getUserBookmarks(userId) {
     try {
       const { data, error } = await supabase
@@ -311,7 +350,10 @@ export const supabaseHelpers = {
     }
   },
 
-  // Analytics helpers for admin
+  // =============================================
+  // ANALYTICS AND ADMIN
+  // =============================================
+
   async getUserStats() {
     try {
       const { data: users, error: usersError } = await supabase
@@ -337,7 +379,10 @@ export const supabaseHelpers = {
     }
   },
 
-  // Platform Settings
+  // =============================================
+  // PLATFORM SETTINGS
+  // =============================================
+
   async getSettings() {
     try {
       const { data, error } = await supabase
@@ -373,7 +418,10 @@ export const supabaseHelpers = {
     }
   },
 
-  // File operations
+  // =============================================
+  // FILE STORAGE OPERATIONS
+  // =============================================
+
   async uploadFile(bucket, path, file) {
     try {
       const { data, error } = await supabase.storage
@@ -440,7 +488,7 @@ export const supabaseHelpers = {
   async listFiles(bucket, folder = "") {
     try {
       const { data, error } = await supabase.storage.from(bucket).list(folder);
-      return { data, error };
+      return { data: data || [], error };
     } catch (err) {
       console.error("List files error:", err);
       return { data: [], error: err };
@@ -449,14 +497,24 @@ export const supabaseHelpers = {
 
   async updateChapterFiles(chapterId, filePaths) {
     try {
+      const updateData = {
+        updated_at: new Date().toISOString(),
+      };
+
+      // Only update fields that are provided
+      if (filePaths.notes !== undefined) {
+        updateData.notes_file_path = filePaths.notes;
+      }
+      if (filePaths.solutions !== undefined) {
+        updateData.solutions_file_path = filePaths.solutions;
+      }
+      if (filePaths.formulas !== undefined) {
+        updateData.formulas_file_path = filePaths.formulas;
+      }
+
       const { data, error } = await supabase
         .from("chapters")
-        .update({
-          notes_file_path: filePaths.notes || null,
-          solutions_file_path: filePaths.solutions || null,
-          formulas_file_path: filePaths.formulas || null,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq("id", chapterId)
         .select()
         .single();
@@ -466,4 +524,101 @@ export const supabaseHelpers = {
       return { data: null, error: err };
     }
   },
+
+  // =============================================
+  // ENHANCED FILE UPLOAD WITH METADATA
+  // =============================================
+
+  async uploadChapterFile(chapterId, materialType, file) {
+    try {
+      console.log(`📁 Starting upload for ${materialType} file...`);
+
+      // Validate inputs
+      if (!chapterId || !materialType || !file) {
+        throw new Error("Missing required parameters for file upload");
+      }
+
+      // Generate unique file path
+      const fileExtension = file.name.split(".").pop();
+      const timestamp = Date.now();
+      const fileName = `${materialType}-${timestamp}.${fileExtension}`;
+      const filePath = `chapter-${chapterId}/${materialType}/${fileName}`;
+
+      console.log(`📂 Generated file path: ${filePath}`);
+
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await this.uploadFile(
+        "chapter-materials",
+        filePath,
+        file
+      );
+
+      if (uploadError) {
+        console.error("Storage upload failed:", uploadError);
+        throw uploadError;
+      }
+
+      console.log("✅ File uploaded to storage successfully");
+
+      // Get the public URL for verification
+      const publicUrl = await this.getFileUrl("chapter-materials", filePath);
+
+      return {
+        data: {
+          path: filePath,
+          url: publicUrl,
+          fileName: fileName,
+          fileSize: file.size,
+          uploadData,
+        },
+        error: null,
+      };
+    } catch (err) {
+      console.error("Chapter file upload error:", err);
+      return { data: null, error: err };
+    }
+  },
+
+  // =============================================
+  // UTILITY FUNCTIONS
+  // =============================================
+
+  async checkConnection() {
+    try {
+      const { data, error } = await supabase
+        .from("chapters")
+        .select("id")
+        .limit(1);
+
+      return { connected: !error, error };
+    } catch (err) {
+      return { connected: false, error: err };
+    }
+  },
+
+  async testUpload() {
+    try {
+      // Test with a small text file
+      const testFile = new Blob(["test"], { type: "text/plain" });
+      const testPath = `test-${Date.now()}.txt`;
+
+      const { data, error } = await this.uploadFile(
+        "chapter-materials",
+        testPath,
+        testFile
+      );
+
+      if (!error) {
+        // Clean up test file
+        await this.deleteFile("chapter-materials", testPath);
+      }
+
+      return { success: !error, error };
+    } catch (err) {
+      return { success: false, error: err };
+    }
+  },
 };
+
+// Export for direct access if needed
+export default supabaseHelpers;
